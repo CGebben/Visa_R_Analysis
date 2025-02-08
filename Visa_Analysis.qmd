@@ -29,10 +29,10 @@ suppressWarnings({
 
 ```{r}
 # Load datasets for short-term and long-term visas, both granted and refused.
-refused_long_visas <- read_csv("refused_long_year_nationality.csv", show_col_types = FALSE)
-refused_short_visas <- read_csv("refused_short_year_nationality.csv", show_col_types = FALSE)
-granted_long_visas <- read_csv("granted_long_year_nationality.csv", show_col_types = FALSE)
-granted_short_visas <- read_csv("granted_short_year_nationality.csv", show_col_types = FALSE)
+refused_long_visas <- read_csv("data/refused_long_year_nationality.csv", show_col_types = FALSE)
+refused_short_visas <- read_csv("data/refused_short_year_nationality.csv", show_col_types = FALSE)
+granted_long_visas <- read_csv("data/granted_long_year_nationality.csv", show_col_types = FALSE)
+granted_short_visas <- read_csv("data/granted_short_year_nationality.csv", show_col_types = FALSE)
 
 # Add a 'Term' column to denote the visa term and a 'Status' column to denote the visa outcome.
 refused_long_visas$Term <- "Long"
@@ -121,7 +121,7 @@ combined_visas <- combined_visas %>%
                   mutate(across(`2017`:`2023`, as.numeric))
 
 # Save the cleaned dataset to a new CSV file.
-write_csv(combined_visas, "combined_visas.csv")
+write_csv(combined_visas, "data/combined_visas.csv")
 ```
 
 For this project, I utilized four distinct datasets from Ireland's [Department of Justice](https://data.gov.ie/organization/department-of-justice):
@@ -154,6 +154,11 @@ The final steps in data preparation focused on data cleaning and conversion. Any
 In this section, we delve into the `combined_visas` dataset and analyze visa refusal trends. Our focus will be on understanding the patterns and changes in visa refusals over the years, across different regions and countries.
 
 ### Visa Application Trends Over Years
+
+```{r}
+# Load cleaned dataset.
+combined_visas <- read_csv("data/combined_visas.csv", show_col_types = FALSE)
+```
 
 ```{r}
 # Transform the data into long format suitable for ggplot.

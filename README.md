@@ -1,11 +1,11 @@
 # Visa Analysis with R
 
 ## Overview  
-This project analyzes Irish visa data using R, focusing on visa grants and refusals across different nationalities and time periods. 
+This project analyzes Irish visa data using R, focusing on visa grants and refusals across different nationalities and time periods.  
 It was developed as the final project for my **Data Programming with R** module at University College Dublin.  
 
 ## Features  
-- Data **cleaning, validation, and merging** across four datasets.  
+- **Data cleaning, validation, and merging** across four datasets.  
 - **Visualization of trends** in visa applications, grants, and refusals.  
 - **Regional analysis** by linking visa data to United Nations geographical classifications.  
 - **Custom R functions** for summarizing and plotting visa trends.  
@@ -23,24 +23,30 @@ The dataset originates from Ireland’s [Department of Justice Open Data Portal]
 
 ## Key Analyses  
 ### **1️⃣ Visa Trends Over Time**  
-- Line graphs illustrate how visa grants and refusals fluctuate over time.  
-- Data highlights the **impact of COVID-19**, showing a sharp decline in short-term visa grants in 2020-2021.  
+- **Line graphs** illustrate how visa grants and refusals fluctuate over time.  
+- **Impact of COVID-19** is visible, with a sharp decline in short-term visa grants in 2020-2021.  
 
 ### **2️⃣ Regional Trends**  
-- Box plots reveal differences in visa grants and refusals **by world region**.  
+- **Box plots** reveal differences in visa grants and refusals **by world region**.  
 - Some regions consistently have higher rejection rates than others.  
 
 ### **3️⃣ Top 10 Countries by Visa Refusals & Grants**  
-- Bar charts rank the **countries with the most refusals and grants**.  
+- **Bar charts** rank the **countries with the most refusals and grants**.  
 - Countries in **Western Africa and South Asia** had the highest visa refusals.  
 - Some countries appear in both the **most granted and most refused** lists, indicating high application volumes.  
 
 ### **4️⃣ Interactive Mapping with Leaflet**  
-- An interactive map displays visa refusals over time, allowing users to toggle different years.  
-- Circle markers represent visa refusals for each country's capital, colored by year.  
+- An **interactive map** displays visa refusals over time, allowing users to toggle different years.  
+- **Circle markers** represent visa refusals for each country's capital, colored by year.  
 
-## How to Run the Project  
-To run this analysis in R:  
-1. Install required packages:  
-   ```r
-   install.packages(c("ggplot2", "dplyr", "tidyverse", "leaflet", "readr", "tidyr", "lubridate", "knitr"))
+## Installation  
+Before running the project, install the required R packages by running this command in R:  
+
+install.packages(scan("requirements.txt", what="character"))
+
+## Running the Analysis  
+
+The main analysis file is **Visa_Analysis.qmd** in the main directory.  
+To generate the report, open this file in RStudio and click **"Render"**.  
+
+The rendered report will be saved as **Visa_Analysis.html** in the same directory.
