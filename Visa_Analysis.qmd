@@ -1,0 +1,558 @@
+---
+title: "Data Programming with R - Final Project"
+author: "Colton Gebben"
+format:
+  html:
+    embed-resources: true
+execute:
+  error: true
+---
+
+## Libraries
+
+```{r}
+suppressWarnings({
+  suppressPackageStartupMessages({
+    library(tibble)
+    library(readr)
+    library(dplyr)
+    library(lubridate)
+    library(tidyr)
+    library(ggplot2)
+    library(leaflet)
+    library(knitr)
+  })
+})
+```
+
+## Data Preparation
+
+```{r}
+# Load datasets for short-term and long-term visas, both granted and refused.
+refused_long_visas <- read_csv("refused_long_year_nationality.csv", show_col_types = FALSE)
+refused_short_visas <- read_csv("refused_short_year_nationality.csv", show_col_types = FALSE)
+granted_long_visas <- read_csv("granted_long_year_nationality.csv", show_col_types = FALSE)
+granted_short_visas <- read_csv("granted_short_year_nationality.csv", show_col_types = FALSE)
+
+# Add a 'Term' column to denote the visa term and a 'Status' column to denote the visa outcome.
+refused_long_visas$Term <- "Long"
+refused_short_visas$Term <- "Short"
+granted_long_visas$Term <- "Long"
+granted_short_visas$Term <- "Short"
+
+refused_long_visas$Status <- "Refused"
+refused_short_visas$Status <- "Refused"
+granted_long_visas$Status <- "Granted"
+granted_short_visas$Status <- "Granted"
+
+# Combine all datasets into one and sort by Nationality, excluding 'Other'.
+combined_visas <- bind_rows(refused_long_visas, refused_short_visas, granted_long_visas, granted_short_visas) %>%
+                  filter(Nationality != "*Other") %>%
+                  arrange(Nationality)
+
+# Re-append the 'Other' rows at the end.
+refused_other_rows <- bind_rows(refused_long_visas, refused_short_visas) %>%
+                      filter(Nationality == "*Other")
+granted_other_rows <- bind_rows(granted_long_visas, granted_short_visas) %>%
+                      filter(Nationality == "*Other")
+combined_visas <- bind_rows(combined_visas, refused_other_rows, granted_other_rows)
+
+# Define the country-region mapping.
+country_region_mapping <- data.frame(
+  Country = c(
+    "Afghanistan", "Albania", "Algeria", "Angola", "Armenia", "Azerbaijan", 
+    "Bahrain", "Bangladesh", "Belarus", "Benin", "Bhutan", "Bosnia and Herzegovina",
+    "Burkina Faso", "Burundi", "Cabo Verde", "Cambodia", "Cameroon",
+    "Central African Republic (the)", "Chad", "China", "Colombia", "Comoros (the)",
+    "Congo (the Democratic Republic of the)", "Congo (the)", "C\xf4te d'Ivoire",
+    "Cuba", "Djibouti", "Dominican Republic (the)", "Ecuador", "Egypt",
+    "Equatorial Guinea", "Eritrea", "Ethiopia", "Faroe Islands (the)", "Gabon",
+    "Gambia (the)", "Georgia", "Ghana", "Guinea", "Guinea-Bissau",
+    "Haiti", "India", "Indonesia", "Iran (Islamic Republic of)", "Iraq",
+    "Jamaica", "Jordan", "Kazakhstan", "Kenya", "Korea (the Democratic People's Republic of) North Korea",
+    "Kosovo", "Kuwait", "Kyrgyzstan", "Lao People's Democratic Republic (the)",
+    "Lebanon", "Liberia", "Libya", "Madagascar", "Malawi", "Mali",
+    "Marshall Islands (the)", "Mauritania", "Mauritius", "Micronesia (Federated States of)",
+    "Moldova (the Republic of)", "Mongolia", "Montenegro", "Morocco", "Mozambique",
+    "Myanmar", "Namibia", "Nepal", "Niger (the)", "Nigeria", "North Macedonia",
+    "Oman", "Pakistan", "Palau", "Palestine, State of", "Papua New Guinea",
+    "Peru", "Philippines (the)", "Qatar", "Russian Federation (the)", "Rwanda",
+    "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia", "Sierra Leone",
+    "Somalia", "South Sudan", "Sri Lanka", "Sudan (the)", "Suriname",
+    "Syrian Arab Republic (the)", "Tajikistan", "Tanzania, the United Republic of",
+    "Thailand", "Timor-Leste", "Togo", "Tunisia", "Turkiye", "Turkmenistan",
+    "Uganda", "Uzbekistan", "Venezuela (Bolivarian Republic of)", "Viet Nam",
+    "Yemen", "Zambia", "Zimbabwe", "*Other"
+  ),
+  Region = c(
+    "Southern Asia", "Southern Europe", "Northern Africa", "Middle Africa", "Western Asia", "Western Asia",
+    "Western Asia", "Southern Asia", "Eastern Europe", "Western Africa", "Southern Asia", "Southern Europe",
+    "Western Africa", "Eastern Africa", "Western Africa", "South-Eastern Asia", "Middle Africa",
+    "Middle Africa", "Middle Africa", "Eastern Asia", "South America", "Eastern Africa",
+    "Middle Africa", "Middle Africa", "Western Africa",
+    "Caribbean", "Eastern Africa", "Caribbean", "South America", "Northern Africa",
+    "Middle Africa", "Eastern Africa", "Eastern Africa", "Northern Europe", "Middle Africa",
+    "Western Africa", "Western Asia", "Western Africa", "Western Africa", "Western Africa",
+    "Caribbean", "Southern Asia", "South-Eastern Asia", "Southern Asia", "Western Asia",
+    "Caribbean", "Western Asia", "Central Asia", "Eastern Africa", "Eastern Asia",
+    "Southern Europe", "Western Asia", "Central Asia", "South-Eastern Asia",
+    "Western Asia", "Western Africa", "Northern Africa", "Eastern Africa", "Eastern Africa", "Western Africa",
+    "Micronesia", "Western Africa", "Eastern Africa", "Micronesia",
+    "Eastern Europe", "Eastern Asia", "Southern Europe", "Northern Africa", "Eastern Africa",
+    "South-Eastern Asia", "Southern Africa", "Southern Asia", "Western Africa", "Western Africa", "Southern Europe",
+    "Western Asia", "Southern Asia", "Micronesia", "Western Asia", "Melanesia",
+    "South America", "South-Eastern Asia", "Western Asia", "Eastern Europe", "Eastern Africa",
+    "Middle Africa", "Western Asia", "Western Africa", "Southern Europe", "Western Africa",
+    "Eastern Africa", "Eastern Africa", "Southern Asia", "Northern Africa", "South America",
+    "Western Asia", "Central Asia", "Eastern Africa",
+    "South-Eastern Asia", "South-Eastern Asia", "Western Africa", "Northern Africa", "Western Asia", "Central Asia",
+    "Eastern Africa", "Central Asia", "South America", "South-Eastern Asia",
+    "Western Asia", "Eastern Africa", "Eastern Africa", "Other"
+  )
+)
+
+# Merge the country-region mapping with the combined dataset.
+combined_visas <- combined_visas %>%
+                  left_join(country_region_mapping, by = c("Nationality" = "Country"))
+
+# Replace '*' with NA in year columns and convert them to numeric.
+combined_visas <- combined_visas %>%
+                  mutate(across(`2017`:`2023`, ~na_if(.x, "*"))) %>%
+                  mutate(across(`2017`:`2023`, as.numeric))
+
+# Save the cleaned dataset to a new CSV file.
+write_csv(combined_visas, "combined_visas.csv")
+```
+
+For this project, I utilized four distinct datasets from Ireland's [Department of Justice](https://data.gov.ie/organization/department-of-justice):
+
+- 'Paper and online short term visa applications refused by year and nationality'
+- 'Paper and online long term visa applications refused by year and nationality'
+- 'Paper and online short term visa applications granted by year and nationality'
+- 'Paper and online long term visa applications granted by year and nationality'
+
+In order to streamline the analysis process, these datasets were renamed for convenience as follows:
+
+- `granted_long_year_nationality.csv`
+- `granted_short_year_nationality.csv`
+- `refused_long_year_nationality.csv`
+- `refused_short_year_nationality.csv`
+
+The data preparation process involved several crucial steps to ensure a cohesive and informative dataset. Initially, each dataset was loaded separately, and specific columns were added to distinguish between the different types of visa applications:
+
+- Term column was added to categorize each entry as either Long or Short term.
+- Status column was introduced to indicate whether the visa application was Refused or Granted.
+
+This approach enabled the creation of a comprehensive dataset that encapsulates all aspects of visa application outcomes. Subsequently, these individual datasets were merged into a single, consolidated dataset. During this merging process, entries categorized as 'Other' were initially excluded to streamline the sorting process. These entries were later re-incorporated at the end of the dataset, ensuring that no information was lost in the consolidation process.
+
+In addition to this, each country in the dataset was mapped to its respective United Nations region provided at 'https://unstats.un.org/unsd/methodology/m49/#ftn13'. This mapping added a geographical layer to the data, enabling an analysis that considered not only individual countries but also broader regional trends.
+
+The final steps in data preparation focused on data cleaning and conversion. Any entries marked with `*` were replaced with `NA` to accurately represent missing data. Furthermore, the columns corresponding to different years, which were initially in character format, were converted into numeric format. This conversion was vital for conducting any numerical or statistical analysis. Finally, the refined dataset was saved as `combined_visas.csv`, ready for the analytical stages of the project.
+
+## Part 1: Analysis
+
+In this section, we delve into the `combined_visas` dataset and analyze visa refusal trends. Our focus will be on understanding the patterns and changes in visa refusals over the years, across different regions and countries.
+
+### Visa Application Trends Over Years
+
+```{r}
+# Transform the data into long format suitable for ggplot.
+long_format <- combined_visas %>%
+  pivot_longer(cols = starts_with("20"), names_to = "Year", values_to = "Applications") %>%
+  group_by(Year, Term, Status) %>%
+  summarize(Applications = sum(as.numeric(Applications), na.rm = TRUE), .groups = 'drop')
+```
+
+```{r}
+# Generate a line graph to visualize trends over the years for different visa types and statuses.
+line_graph <- ggplot(long_format, aes(x = Year, y = Applications, color = interaction(Term, Status), group = interaction(Term, Status))) +
+  geom_line() +
+  labs(title = "Visa Applications Trends Over Years",
+       x = "Year",
+       y = "Total Visa Applications",
+       color = "Type") +
+  theme_minimal()
+
+# Display the line graph.
+line_graph
+```
+
+```{r}
+# Tabular summary of visa applications per year for different visa types and statuses.
+applications_per_year_table <- long_format %>%
+  group_by(Year) %>%
+  summarize(ShortGranted = sum(Applications[Term == "Short" & Status == "Granted"]),
+            ShortRefused = sum(Applications[Term == "Short" & Status == "Refused"]),
+            LongGranted = sum(Applications[Term == "Long" & Status == "Granted"]),
+            LongRefused = sum(Applications[Term == "Long" & Status == "Refused"]), .groups = 'drop')
+
+# Display the table with visa applications per year for different types and statuses using kable.
+kable(applications_per_year_table, caption = "Visa Applications Per Year (Short/Long, Granted/Refused)", 
+      format = "html", table.attr = "style='width:100%;'")
+```
+
+### Analysis
+
+The line graph traces the trends of both granted and refused visa applications over the years, comparing short-term and long-term visas. Notably, short-term visa applications show a more pronounced variance compared to long-term visas. This could be attributed to the nature of short-term visas, which are often influenced by factors like tourism trends, business travels, and cultural exchanges.
+
+The impact of the COVID-19 pandemic is starkly visible in the data, particularly in 2020 and 2021. During these years, there was a dramatic drop in short-term visa grants, likely due to global travel restrictions and lockdowns. The same period also saw a decrease in visa refusals, reflecting the overall reduction in travel and visa applications. In contrast, long-term visas did not experience as drastic a decline, possibly indicating that these visas cater to more essential or less flexible travel purposes like education or employment.
+
+The accompanying table provides a year-by-year breakdown, offering numerical insights into these trends. For example, in 2020, short-term granted visas plummeted to 17,709 from 108,928 in the previous year, highlighting the pandemic's immediate effect. However, there is a notable recovery in 2022 and 2023, indicating a resurgence in travel and visa applications as global restrictions eased.
+
+This analysis underscores how global events, like the COVID-19 pandemic, have significantly influenced international travel patterns. It also highlights the differences in how these events impact short-term and long-term visa applications. The data shows a more stable trend in long-term visa applications, suggesting a consistent need for these visas irrespective of fluctuating global circumstances.
+
+### Total Refusals by Region
+
+```{r}
+# Transform data for box plot to include both refusals and grants
+long_format_boxplot <- combined_visas %>%
+  pivot_longer(cols = starts_with("20"), names_to = "Year", values_to = "Applications") %>%
+  group_by(Region, Year, Status) %>%
+  summarize(Applications = sum(as.numeric(Applications), na.rm = TRUE), .groups = 'drop')
+```
+
+```{r}
+# Create a box plot for granted visa applications across regions
+box_plot_granted <- ggplot(long_format_boxplot %>% filter(Status == "Granted"), 
+                           aes(x = Region, y = Applications, fill = Region)) +
+  geom_boxplot() +
+  labs(title = "Distribution of Granted Visa Applications Across Regions",
+       x = "Region",
+       y = "Total Granted Visa Applications") +
+  theme_minimal() +
+  coord_flip() +
+  theme(legend.position = "none") # Remove legend
+
+# Display the box plot for granted applications.
+box_plot_granted
+```
+
+```{r}
+# Create a box plot for refused visa applications across regions
+box_plot_refused <- ggplot(long_format_boxplot %>% filter(Status == "Refused"), 
+                           aes(x = Region, y = Applications, fill = Region)) +
+  geom_boxplot() +
+  labs(title = "Distribution of Refused Visa Applications Across Regions",
+       x = "Region",
+       y = "Total Refused Visa Applications") +
+  theme_minimal() +
+  coord_flip() +
+  theme(legend.position = "none") # Remove legend
+
+# Display the box plot for refused applications.
+box_plot_refused
+```
+
+```{r}
+# Summarize granted visa applications per region
+summary_by_region_table_granted <- long_format_boxplot %>%
+  filter(Status == "Granted") %>%
+  group_by(Region) %>%
+  summarize(
+    Total = sum(Applications),
+    Average = mean(Applications),
+    Median = median(Applications),
+    .groups = 'drop'
+  )
+
+# Display the summarized table for granted applications with a title.
+kable(summary_by_region_table_granted, 
+      caption = "Summary of Granted Visa Applications per Region", 
+      format = "markdown")
+```
+
+```{r}
+# Summarize refused visa applications per region
+summary_by_region_table_refused <- long_format_boxplot %>%
+  filter(Status == "Refused") %>%
+  group_by(Region) %>%
+  summarize(
+    Total = sum(Applications),
+    Averages = mean(Applications),
+    Median = median(Applications),
+    .groups = 'drop'
+  )
+
+# Display the summarized table for refused applications with a title.
+kable(summary_by_region_table_refused, 
+      caption = "Summary of Refused Visa Applications per Region", 
+      format = "markdown")
+```
+
+### Analysis
+
+The box plots and accompanying tables for both granted and refused visa applications across various regions provide a comprehensive understanding of the global visa application landscape.
+
+The box plot for granted visa applications highlights significant regional differences:
+
+- Southern Asia is prominent with an extensive range of granted applications, indicated by a long box and extended whiskers. The median slightly toward the lower end suggests a wide spread of data points.
+- Eastern Europe and Eastern Asia display medium-sized boxes but with differing whisker lengths and median positions. Eastern Europe shows a tendency towards lower application volumes with occasional high outliers, while Eastern Asia maintains a consistently higher volume.
+- Western Asia presents a smaller box size with a noticeable lower whisker, indicating variability but a general inclination towards more granted applications.
+
+The box plot for refused visa applications illustrates different regional dynamics:
+
+- Regions like Southern Asia and Western Africa feature prominently with long boxes, suggesting a broad range of refusal numbers. This could reflect diverse visa policies or application patterns in these regions.
+- Western Asia and Northern Africa exhibit distinct patterns with varying whisker lengths and median positions, hinting at inconsistencies in refusal rates.
+
+The accompanying tables for both granted and refused applications provides a quantifiable perspective on the trends shown in the box plots.
+
+Together, these box plots and tables offer a holistic view of visa application trends around the world. The analysis not only highlights the disparities among regions but also underscores the complexity of visa application outcomes influenced by various geopolitical, economic, and administrative factors.
+
+### Top Ten Countries with Highest Visa Refusals
+
+```{r}
+# Summarize total refusals per country and create the bar chart.
+total_refusals_per_country <- combined_visas %>%
+  filter(Status == "Refused") %>%
+  group_by(Nationality) %>%
+  summarize(TotalRefusals = sum(`2017`, `2018`, `2019`, `2020`, `2021`, `2022`, `2023`, na.rm = TRUE), .groups = 'drop') %>%
+  arrange(desc(TotalRefusals))
+
+top_ten_chart_refusals <- ggplot(head(total_refusals_per_country, 10), aes(x = reorder(Nationality, TotalRefusals), y = TotalRefusals, fill = Nationality)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 10 Countries with Highest Visa Refusals",
+       x = "Country",
+       y = "Total Visa Refusals") +
+  theme_minimal() +
+  coord_flip() +
+  theme(legend.position = "none")
+
+# Display the bar chart for refusals.
+top_ten_chart_refusals
+```
+
+```{r}
+# Summarize total grants per country and create the bar chart.
+total_grants_per_country <- combined_visas %>%
+  filter(Status == "Granted") %>%
+  group_by(Nationality) %>%
+  summarize(TotalGrants = sum(`2017`, `2018`, `2019`, `2020`, `2021`, `2022`, `2023`, na.rm = TRUE), .groups = 'drop') %>%
+  arrange(desc(TotalGrants))
+
+top_ten_chart_grants <- ggplot(head(total_grants_per_country, 10), aes(x = reorder(Nationality, TotalGrants), y = TotalGrants, fill = Nationality)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 10 Countries with Highest Visa Grants",
+       x = "Country",
+       y = "Total Visa Grants") +
+  theme_minimal() +
+  coord_flip() +
+  theme(legend.position = "none")
+
+# Display the bar chart for grants.
+top_ten_chart_grants
+```
+
+```{r}
+# Get the top 10 countries with the highest visa refusals and their regions.
+top_refusals_countries_with_regions <- head(total_refusals_per_country, 10) %>%
+  left_join(combined_visas %>% select(Nationality, Region) %>% distinct(), by = "Nationality")
+
+# Display the table with regions for refusals.
+kable(top_refusals_countries_with_regions, caption = "Top 10 Countries with Highest Visa Refusals and Their Regions", format = "markdown")
+```
+
+```{r}
+# Get the top 10 countries with the highest visa grants and their regions.
+top_grants_countries_with_regions <- head(total_grants_per_country, 10) %>%
+  left_join(combined_visas %>% select(Nationality, Region) %>% distinct(), by = "Nationality")
+
+# Display the table with regions for grants.
+kable(top_grants_countries_with_regions, caption = "Top 10 Countries with Highest Visa Grants and Their Regions", format = "markdown")
+```
+
+### Analysis
+
+The bar chart and accompanying table for the top 10 countries with the highest number of visa refusals offer insights into global visa policies. Nigeria leads significantly with the highest number of refusals, followed by Pakistan and India. This indicates that these countries, particularly in Western Africa and Southern Asia, face a high frequency of visa denials. The diversity in the geographical distribution of these refusals suggests that factors like regional visa policies, application volumes, and possibly socio-political considerations play a role in the high refusal rates observed.
+
+In contrast, the analysis of the top 10 countries with the highest number of visa grants reveals different trends. Countries like India, China, and Pakistan are notable for their high numbers of granted visas. The presence of these countries at the top of the list may reflect larger volumes of outbound travel, strong international ties, or a higher rate of successful applications for reasons such as education, business, or tourism.
+
+This juxtaposition of the top countries for visa refusals and grants highlights the complexity of global visa policies. While some countries appear on both lists, the reasons behind their high numbers in each category can be vastly different. For instance, while India and Pakistan have high refusal rates, they also have a significant number of granted visas, indicating a large volume of visa applications from these countries.
+
+The analysis demonstrates that global visa outcomes are influenced by a myriad of factors, including but not limited to geopolitical relations, economic conditions, and the nature of the visa applications. This comprehensive view underscores the multifaceted nature of visa policies and their impact on international travel and migration.
+
+## Part 2: R Package
+
+The leaflet package in R, detailed on its [CRAN page](https://cran.r-project.org/web/packages/leaflet/index.html), is a powerful tool for creating interactive maps. It serves as a bridge to the `Leaflet.js` JavaScript library, enabling R users to produce dynamic and interactive geographical visualizations directly from their datasets. The package's versatility allows for the integration of various map layers, including tile layers, markers, pop-ups, and diverse geospatial shapes. This makes it particularly useful across fields such as urban planning, environmental monitoring, tourism, and disaster response. Its capacity to manage different types of spatial data and overlay multiple layers on maps renders it invaluable for both straightforward and intricate geographic data visualization tasks in R.
+
+```{r}
+# Data frame with capitals' coordinates.
+capitals_data <- data.frame(
+  Nationality = c("India", "Nigeria", "Albania", "Colombia", "Jordan", "Viet Nam"),
+  Capital = c("New Delhi", "Abuja", "Tirana", "Bogotá", "Amman", "Hanoi"),
+  Latitude = c(28.61, 9.06, 41.33, 4.61, 31.95, 21.03),
+  Longitude = c(77.20, 7.49, 19.82, -74.08, 35.93, 105.85)
+)
+
+# Define a color palette for each year.
+year_colors <- c("2017" = "red", "2018" = "blue", "2019" = "green", "2020" = "orange", 
+                 "2021" = "purple", "2022" = "yellow", "2023" = "pink")
+```
+
+First, I organize the geographical data that will be visualized. This involves creating a dataframe called `capitals_data`, which contains a selection of countries from the `combined_visas` dataset and their name `Nationality`, the name of their capital city `Capital`, and the geographical coordinates of the capital `Latitude and Longitude`. This data is needed to place markers on the map, ensuring that each visual representation aligns with its real-world location. I also created a color coordination for the years, which will be reflected in the map for better visibility.
+
+```{r}
+# Create a leaflet map.
+suppressWarnings({
+  m <- leaflet() %>%
+       addTiles() %>%
+       setView(lng = 0, lat = 0, zoom = 2)
+})
+```
+
+The above code demonstrates the first function of the package and the initial setup of an interactive map using `leaflet()`. It starts with creating a basic map object and then adds default tile layers using `addTiles()`. The `setView()` function sets the initial viewpoint of the map, specifying the longitude, latitude, and zoom level.
+
+```{r}
+# Add circle markers for each year.
+years <- c("2017", "2018", "2019", "2020", "2021", "2022", "2023")
+
+# Loop through each year to add circle markers to the map.
+for(year in years) {
+  # Filter the combined visa data for selected countries and the specific year.
+  yearly_data <- combined_visas %>%
+                 filter(Nationality %in% capitals_data$Nationality) %>%
+                 select(Nationality, all_of(year)) %>%
+                 mutate(YearlyDeniedVisas = get(year)) %>%
+                 filter(!is.na(YearlyDeniedVisas)) %>%
+                 merge(capitals_data, by = "Nationality")
+
+  # Add circle markers to the map for each year.
+  m <- m %>% addCircleMarkers(
+    data = yearly_data,
+    lng = ~Longitude, lat = ~Latitude,
+    color = year_colors[[year]],  # Directly use the color for the year
+    radius = sqrt(yearly_data$YearlyDeniedVisas),
+    popup = ~paste(Capital, ": ", YearlyDeniedVisas, " visa refusals in ", year),
+    group = year
+  )
+}
+```
+
+For the next function, the map is enhanced by adding circle markers for each year. The loop iterates through the specified years, filters the data for that year, and adds circle markers to the map using `addCircleMarkers()`. Each marker, positioned based on the country's capital city coordinates, represents the number of visa refusals or grants for that country in a specific year.
+
+```{r}
+# Add layers control.
+m <- m %>% addLayersControl(
+  overlayGroups = c(years),
+  options = layersControlOptions(collapsed = FALSE)
+)
+```
+
+The `addLayersControl()` function adds an interactive layer control widget to the map. This allows users to toggle the visibility of different layers—in this case, the layers representing different years. The `overlayGroups` parameter specifies the names of the layers that users can control.
+
+```{r}
+# Display the map
+m  
+```
+
+Finally, the variable `m` holding the map is called to display the interactive map. This map showcases the spatial distribution of visa refusals across different countries and years, with interactive elements such as zooming and layer toggling and color coordination representing each of the years. These elements aim to enhance a user's experience and understanding of the data.
+
+
+## Part 3: Functions/Programming
+
+```{r}
+analyzeVisaTrends <- function(data, groupBy, status) {
+  # Check if the required columns are in the dataset
+  required_columns <- c(groupBy, "2017", "2018", "2019", "2020", "2021", "2022", "2023", "Status")
+  if (!all(required_columns %in% names(data))) {
+    stop("The dataset does not contain the required columns")
+  }
+
+  # Filtering data based on the status (Granted or Refused)
+  filtered_data <- data %>% filter(Status == status)
+
+  # Grouping and summarizing data
+  summarized_data <- filtered_data %>%
+    group_by(!!sym(groupBy)) %>%
+    summarize(
+      TotalApplications = sum(`2017`, `2018`, `2019`, `2020`, `2021`, `2022`, `2023`, na.rm = TRUE),
+      AverageApplications = mean(c(`2017`, `2018`, `2019`, `2020`, `2021`, `2022`, `2023`), na.rm = TRUE),
+      MedianApplications = median(c(`2017`, `2018`, `2019`, `2020`, `2021`, `2022`, `2023`), na.rm = TRUE),
+      .groups = 'drop'
+    )
+
+  # Creating an S3 object
+  output <- list(data = summarized_data, groupBy = groupBy, status = status)
+  class(output) <- "VisaTrendAnalysis"
+
+  return(output)
+}
+```
+
+The `analyzeVisaTrends` function is a custom R function designed to analyze visa application data. It accepts three parameters: the dataset (`data`), the column to group by (`groupBy`), and the application status (`status` which can be either "Refused" or "Granted"). This function checks for the necessary columns, filters the data based on the specified status, and then groups and summarizes the data to calculate the total, average, and median applications. It returns an S3 object of class `VisaTrendAnalysis`, which contains the summarized data along with the grouping and status parameters.
+
+```{r}
+# S3 Print Method
+print.VisaTrendAnalysis <- function(x) {
+  cat("Visa Trend Analysis\n")
+  cat("Based on:", x$groupBy, "and", x$status, "status\n\n")
+
+  # Sort data and display the top 10 countries
+  top_countries <- x$data %>% 
+                   arrange(desc(TotalApplications)) %>% 
+                   head(10)
+
+  cat("Top 10 Countries for", x$status, "applications:\n")
+  print(top_countries)
+}
+```
+
+The `print.VisaTrendAnalysis` function is an S3 method specifically for printing objects of the class `VisaTrendAnalysis`. It displays a brief header indicating the basis of the analysis (grouping and status) and then prints out the top 10 countries according to the total number of visa applications (either granted or refused). This method makes it easier to quickly view the most significant data points from the analysis.
+
+```{r}
+# S3 Summary Method
+summary.VisaTrendAnalysis <- function(object) {
+  summary_data <- summary(object$data)
+  return(summary_data)
+}
+```
+
+The `summary.VisaTrendAnalysis` method provides a detailed statistical summary of the data contained within a `VisaTrendAnalysis` object. This method is useful for gaining a comprehensive understanding of the data distribution, going beyond just the top countries to include statistical measures across the entire dataset.
+
+```{r}
+# S3 Plot Method
+plot.VisaTrendAnalysis <- function(x) {
+  # Sort data and select the top 10 countries
+  top_countries <- x$data %>% 
+                   arrange(desc(TotalApplications)) %>% 
+                   head(10)
+
+  # Ensuring UTF-8 encoding for the groupBy column
+  top_countries[[x$groupBy]] <- iconv(top_countries[[x$groupBy]], to = "UTF-8")
+
+  # Order the groupBy factor based on TotalApplications
+  top_countries[[x$groupBy]] <- factor(top_countries[[x$groupBy]], levels = top_countries[[x$groupBy]])
+
+  ggplot(top_countries, aes(x = !!sym(x$groupBy), y = TotalApplications, fill = x$status)) +
+    geom_bar(stat = "identity") +
+    labs(title = paste("Top 10 Visa", x$status, "by", x$groupBy),
+         x = x$groupBy,
+         y = paste("Total Visa", x$status)) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + # Rotate x-axis labels
+    theme(legend.position = "none")
+}
+```
+
+The `plot.VisaTrendAnalysis` method generates a bar plot for the top 10 countries in a `VisaTrendAnalysis` object, based on the total number of visa applications. This visual representation is particularly useful for quickly identifying patterns and outliers in the data. The method ensures proper labeling and orientation of the plot for clear interpretation.
+
+```{r}
+# Analyze visa refusals by nationality
+result_refused <- analyzeVisaTrends(combined_visas, "Nationality", "Refused")
+
+# Analyze visa grants by nationality
+result_granted <- analyzeVisaTrends(combined_visas, "Nationality", "Granted")
+
+# Print the results
+print(result_refused)
+print(result_granted)
+
+# Get detailed summaries
+summary(result_refused)
+summary(result_granted)
+
+# Plot the results
+plot(result_refused)
+plot(result_granted)
+```
+
+The provided code demonstrates how to use the `analyzeVisaTrends` function along with its associated S3 methods. It includes examples of analyzing both visa refusals and grants by nationality, printing the results, summarizing the data, and plotting the top countries. This comprehensive example showcases the functionality and utility of the custom function and its methods in practical analysis.
